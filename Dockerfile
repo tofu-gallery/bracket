@@ -41,7 +41,7 @@ ENV ENVIRONMENT=PRODUCTION \
     SERVE_FRONTEND=true \
     API_PREFIX=/api \
     ALLOW_DEMO_USER_REGISTRATION=false \
-    SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25
+    SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25.1
 
 EXPOSE 8400
 

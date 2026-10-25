@@ -3,7 +3,7 @@
 This repository is Tofu's copy of **evroon/bracket** (licence: AGPL-3.0), listed in Tofu's app gallery as **Tournament planner**: Bracket, a tournament system. Clubs run tournaments with teams, players and courts; stages are round-robin groups, single elimination or Swiss rounds; Bracket schedules the matches, keeps the scores and rankings, and can publish a public dashboard of the schedule and standings for each tournament.
 
 - `master` mirrors the upstream repository and is never committed to by Tofu.
-- `tofu` carries Tofu's own changes; tags named `pin/<date>` mark the versions the gallery points to. The current pin is `pin/2026-10-25`.
+- `tofu` carries Tofu's own changes; tags named `pin/<date>` mark the versions the gallery points to. The current pin is `pin/2026-10-25.1`; it replaces `pin/2026-10-25` for new copies (see "Verification").
 - A visitor who chooses this app gets a private snapshot of the pinned version in their own Tofu account. Their copy does not follow upstream updates.
 - Upstream: https://github.com/evroon/bracket at `97f408a488a0b1bed7cf7cd53f6394aea8eb9d67` (2026-10-20).
 
@@ -31,7 +31,7 @@ This repository is Tofu's copy of **evroon/bracket** (licence: AGPL-3.0), listed
   - The frontend is built with `VITE_API_BASE_URL=/api`, so it calls the API on its own address. Upstream builds it for `http://localhost:8400/api`, which only works in a browser on the machine running the container.
   - `ENVIRONMENT=PRODUCTION`, `SERVE_FRONTEND=true` and `API_PREFIX=/api` are image defaults. Without `ENVIRONMENT`, Bracket starts in development mode, which has a fixed admin email and password and a fixed JWT secret in its code (`backend/bracket/config.py`, `DevelopmentConfig`) and creates that admin account on an empty database. Upstream's `docker-compose.yml` sets the other two.
   - `ALLOW_DEMO_USER_REGISTRATION=false`: no demo accounts (see "What works differently on Tofu").
-  - `SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25` is an image default (see "Licence and source code").
+  - `SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25.1` is an image default (see "Licence and source code").
   - The command runs through `/bin/sh -c` and binds `0.0.0.0:${PORT:-8400}`: Tofu sends traffic to `PORT`, and upstream listens on 8400. The `HEALTHCHECK` asks `/api/ping` on the same port.
   - `USER root` right before `CMD`: upstream's image runs the server as the user `bracket`, which cannot bind port 80, the `PORT` Tofu's container hosting sets. The image still installs the backend as `bracket`.
 - `backend/bracket/config.py`:
@@ -85,7 +85,7 @@ Bracket signs each sign-in token with `JWT_SECRET`; a token is valid for a week.
 - AGPL-3.0. `LICENSE` and every copyright notice stay exactly as upstream has them. Every file Tofu changes carries a dated `Modified by Tofu on 2026-10-25` note at its top and a `Tofu (2026-10-25)` note at each change; `backend/bracket/utils/tofu_logos.py` and this file are Tofu's own.
 - The Bracket name and logo (`frontend/public/favicon.svg`, `favicon-wide.svg`) belong to the upstream project; the gallery uses them only to say which app this is. The stage icons under `frontend/public/icons` and the translations under `frontend/public/locales` are upstream's. No fonts are bundled. `docs/` is upstream's documentation website, which the image does not include.
 - Upstream's development defaults stay in the code and are never used by this image, which runs in production mode: `DevelopmentConfig` in `backend/bracket/config.py` (a fixed admin password and JWT secret), and `backend/ci.env` (a JWT secret for upstream's test runs only).
-- **Source offer (AGPL-3.0 section 13).** A modified copy that people use over a network has to offer them its own source code. The sign-in page's "Source code" link, the "More" menu's "GitHub" and the public dashboard's footer "GitHub" all open `/api/source`, which redirects to `SOURCE_URL`. The image sets it to https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25. A `SOURCE_URL` saved on the app's Keys & settings page wins, so a copy can also name this repository at the pin's exact commit, `https://github.com/tofu-gallery/bracket/tree/<commit>`; both show the same code. This repository is public, and a tag never moves.
+- **Source offer (AGPL-3.0 section 13).** A modified copy that people use over a network has to offer them its own source code. The sign-in page's "Source code" link, the "More" menu's "GitHub" and the public dashboard's footer "GitHub" all open `/api/source`, which redirects to `SOURCE_URL`. The image sets it to https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25.1, the pin it is built from. A `SOURCE_URL` saved on the app's Keys & settings page wins, so a copy can also name this repository at the pin's exact commit, `https://github.com/tofu-gallery/bracket/tree/<commit>`; both show the same code. This repository is public, and a tag never moves.
 - An owner who changes their copy's code runs a modified version of their own. They have to publish that source and set `SOURCE_URL` to it on the app's Keys & settings page. The server reads it at start, so it takes effect with the next deploy and needs no code change.
 
 ## Verification

@@ -47,7 +47,8 @@ This repository is Tofu's copy of **evroon/bracket** (licence: AGPL-3.0), listed
   - `frontend/src/services/adapter.tsx` adds `getSourceCodeUrl()`, which is `/api/source` on this image.
   - `frontend/src/pages/login.tsx`: the sign-in page shows a "Source code" link under "Create Account - Forgot password?", before anyone signs in.
   - `frontend/src/components/navbar/_main_links.tsx` (the signed-in "More" menu's "GitHub") and `frontend/src/components/dashboard/footer.tsx` (the public dashboard's footer, "GitHub") open `/api/source` instead of upstream's repository.
-- Nothing was removed. Tofu's safety check blocks nothing in this repository (see "Verification"); upstream's GitHub Actions workflows under `.github/workflows/` stay, and a copy never runs them.
+- `frontend/src/main.tsx`: upstream's `AnalyticsScript` is removed. It added a third-party analytics script to every page when `VITE_ANALYTICS_SCRIPT_SRC` (with `VITE_ANALYTICS_DATA_DOMAIN` and `VITE_ANALYTICS_DATA_WEBSITE_ID`) was set when the frontend was built. This image never set it, since its build passes no such value, but a copy loads no analytics at all now.
+- Nothing else was removed. Tofu's safety check blocks nothing in this repository (see "Verification"); upstream's GitHub Actions workflows under `.github/workflows/` stay, and a copy never runs them.
 
 ## The sign-in secret
 
@@ -61,6 +62,7 @@ Bracket signs each sign-in token with `JWT_SECRET`; a token is valid for a week.
 ## What works differently on Tofu
 
 - **Accounts.** Bracket has its own email and password accounts, not Tofu sign-in. Anyone who can open the address can create an account on its sign-up page ("Create Account") until the owner sets `ALLOW_USER_REGISTRATION=false` after creating their own account, or makes the app private on Tofu. Closing sign-up does not affect accounts that exist. No account is special: each account sees the clubs it created or was added to, and the first account is not an admin. There is no email: "Forgot password?" opens a page upstream has not built yet ("not found"), so a forgotten password cannot be reset from the app.
+- **No analytics, no captcha.** The copy loads no analytics script (above). hCaptcha stays off: the sign-up and demo pages show it only when `VITE_HCAPTCHA_SITE_KEY` is set when the frontend is built, and the image's build sets only `VITE_API_BASE_URL` (the `Dockerfile` declares no build argument, so no setting reaches the build). The server checks a captcha only when `CAPTCHA_SECRET` is set; leave it unset, because without a site key in the frontend every sign-up would then be refused.
 - **No demo accounts.** Upstream's demo sign-up (`/demo`) makes throwaway accounts that a job deletes after a while; here it answers "Demo account creation is unavailable for now". An owner can turn it back on with `ALLOW_DEMO_USER_REGISTRATION=true`, which also starts that job.
 - **Logos are kept in the database** (above), up to 5 MB each, and only while a team or tournament names them. They are the only files Bracket writes; everything else it stores goes straight into the database.
 - **The database connection uses the pooler's session mode** (above). Each container holds at most five connections of the pooler's pool: the asyncpg pool's, which opens one at start and grows with traffic. At start, creating the tables (on an empty database) and each Alembic command open one more connection for a moment and close it.

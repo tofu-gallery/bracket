@@ -1,3 +1,5 @@
+// Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): upstream's analytics loader is removed.
+// See TOFU.md.
 import { MantineProvider, createTheme } from '@mantine/core';
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
@@ -52,18 +54,8 @@ const theme = createTheme({
   },
 });
 
-function AnalyticsScript() {
-  if (import.meta.env.VITE_ANALYTICS_SCRIPT_SRC == null) {
-    return null;
-  }
-
-  var script = document.createElement('script');
-  script.setAttribute('async', '');
-  script.setAttribute('data-domain', import.meta.env.VITE_ANALYTICS_DATA_DOMAIN);
-  script.setAttribute('data-website-id', import.meta.env.VITE_ANALYTICS_DATA_WEBSITE_ID);
-  script.setAttribute('src', import.meta.env.VITE_ANALYTICS_SCRIPT_SRC);
-  document.head.appendChild(script);
-}
+// Tofu (2026-10-25): upstream's AnalyticsScript, which added a third-party analytics script to every page when
+// VITE_ANALYTICS_SCRIPT_SRC was set at build time, is removed; a copy loads no analytics.
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -113,5 +105,3 @@ createRoot(document.getElementById('root')!).render(
     </NuqsAdapter>
   </StrictMode>,
 );
-
-AnalyticsScript();

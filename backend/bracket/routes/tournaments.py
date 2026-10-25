@@ -1,5 +1,6 @@
 # Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): an uploaded logo is also kept in the
-# database. See TOFU.md.
+# database, a logo over 5 MB is refused, and a logo's row goes when it is replaced or its tournament is deleted.
+# See TOFU.md.
 import os
 from typing import Literal
 from uuid import uuid4
@@ -53,7 +54,7 @@ from bracket.utils.errors import (
 )
 from bracket.utils.id_types import TournamentId
 from bracket.utils.logging import logger
-from bracket.utils.tofu_logos import save_logo
+from bracket.utils.tofu_logos import delete_logo, read_logo, save_logo
 
 router = APIRouter(prefix=config.api_prefix)
 
@@ -120,6 +121,9 @@ async def update_tournament_by_id(
 async def delete_tournament(
     tournament_id: TournamentId, _: UserPublic = Depends(user_authenticated_for_tournament)
 ) -> SuccessResponse:
+    # Tofu (2026-10-25): the tournament's logo, whose row in the database goes with it (bracket/utils/tofu_logos.py).
+    logo_filename = (await sql_get_tournament(tournament_id)).logo_path
+
     for ranking in await get_all_rankings_in_tournament(tournament_id):
         await sql_delete_ranking(tournament_id, ranking.id)
 
@@ -133,6 +137,7 @@ async def delete_tournament(
     ):
         await sql_delete_tournament(tournament_id)
 
+    await delete_logo("tournament-logos", logo_filename)
     return SuccessResponse()
 
 
@@ -188,7 +193,7 @@ async def upload_logo(
     tournament_id: TournamentId,
     file: UploadFile | None = None,
     _: UserPublic = Depends(user_authenticated_for_tournament),
-    __: Tournament = Depends(disallow_archived_tournament),
+    tournament: Tournament = Depends(disallow_archived_tournament),
 ) -> TournamentResponse:
     old_logo_path = await get_tournament_logo_path(tournament_id)
     filename: str | None = None
@@ -204,7 +209,8 @@ async def upload_logo(
 
         if new_logo_path:
             await aiofiles.os.makedirs("static/tournament-logos", exist_ok=True)
-            content = await file.read()
+            # Tofu (2026-10-25): a file over 5 MB is refused here, before anything is written or saved.
+            content = await read_logo(file)
             async with aiofiles.open(new_logo_path, "wb") as f:
                 await f.write(content)
             # Tofu (2026-10-25): also keep the logo in the database (bracket/utils/tofu_logos.py).
@@ -220,4 +226,7 @@ async def upload_logo(
         tournaments.update().where(tournaments.c.id == tournament_id),
         values={"logo_path": filename},
     )
+    # Tofu (2026-10-25): the replaced or removed logo's row goes as soon as the tournament stops naming it.
+    # `tournament.logo_path` names it even when this server's disk no longer has its file (old_logo_path is then None).
+    await delete_logo("tournament-logos", tournament.logo_path)
     return TournamentResponse(data=await sql_get_tournament(tournament_id))

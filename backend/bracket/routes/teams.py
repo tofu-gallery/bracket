@@ -1,5 +1,5 @@
 # Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): an uploaded logo is also kept in the
-# database. See TOFU.md.
+# database, a logo over 5 MB is refused, and a logo's row goes when it is replaced or its team is deleted. See TOFU.md.
 import csv
 import os
 from uuid import uuid4
@@ -52,7 +52,7 @@ from bracket.utils.errors import ForeignKey, check_foreign_key_violation
 from bracket.utils.id_types import PlayerId, TeamId, TournamentId
 from bracket.utils.logging import logger
 from bracket.utils.pagination import PaginationTeams
-from bracket.utils.tofu_logos import save_logo
+from bracket.utils.tofu_logos import delete_logo, read_logo, save_logo
 from bracket.utils.types import assert_some
 
 router = APIRouter(prefix=config.api_prefix)
@@ -147,7 +147,8 @@ async def update_team_logo(
 
         if new_logo_path:
             await aiofiles.os.makedirs("static/team-logos", exist_ok=True)
-            content = await file.read()
+            # Tofu (2026-10-25): a file over 5 MB is refused here, before anything is written or saved.
+            content = await read_logo(file)
             async with aiofiles.open(new_logo_path, "wb") as f:
                 await f.write(content)
             # Tofu (2026-10-25): also keep the logo in the database (bracket/utils/tofu_logos.py).
@@ -163,6 +164,9 @@ async def update_team_logo(
         teams.update().where(teams.c.id == team.id),
         values={"logo_path": filename},
     )
+    # Tofu (2026-10-25): the replaced or removed logo's row goes as soon as the team stops naming it. `team.logo_path`
+    # names it even when this server's disk no longer has its file (old_logo_path is then None).
+    await delete_logo("team-logos", team.logo_path)
     return SingleTeamResponse(data=assert_some(await get_team_by_id(team.id, tournament_id)))
 
 
@@ -182,6 +186,8 @@ async def delete_team(
     ):
         await sql_delete_team(tournament_id, team.id)
 
+    # Tofu (2026-10-25): a deleted team's logo goes from the database with it (bracket/utils/tofu_logos.py).
+    await delete_logo("team-logos", team.logo_path)
     return SuccessResponse()
 
 

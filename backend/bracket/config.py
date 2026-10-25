@@ -87,16 +87,18 @@ def tofu_pg_dsn(database_url: str) -> str:
     """
     Tofu (2026-10-25): PG_DSN from the DATABASE_URL Tofu gives the app.
 
-    Tofu's DATABASE_URL names Supabase's transaction pooler (port 6543 on <region>.pooler.supabase.com). Bracket talks
-    to PostgreSQL through asyncpg, which prepares every statement and runs it in a second round trip, outside any
-    transaction; the transaction pooler may send that second round trip to another server connection, where the
-    statement does not exist. The same pooler serves session mode on port 5432 with the same user and password, and
-    keeps one server connection per client connection, so the port is moved there. Any other address is kept as it is.
+    Tofu's DATABASE_URL names a Supavisor pooler in transaction mode: port 6543 on a host with a `pooler` label, such
+    as Supabase Cloud's aws-0-<region>.pooler.supabase.com or Tofu's own database backend's
+    aws-0-<region>.pooler.<domain>. Bracket talks to PostgreSQL through asyncpg, which prepares every statement and runs
+    it in a second round trip, outside any transaction; the transaction pooler may send that second round trip to
+    another server connection, where the statement does not exist. The same pooler serves session mode on port 5432
+    with the same user and password, and keeps one server connection per client connection, so the port is moved there
+    for any host whose name contains `.pooler.`. Any other address is kept as it is.
     """
     parts = urlsplit(database_url)
     scheme = "postgresql" if parts.scheme in ("postgres", "postgresql") else parts.scheme
     netloc = parts.netloc
-    if (parts.hostname or "").endswith(".pooler.supabase.com") and parts.port == 6543:
+    if ".pooler." in (parts.hostname or "") and parts.port == 6543:
         netloc = f"{netloc.rsplit(':', 1)[0]}:5432"
     return urlunsplit((scheme, netloc, parts.path, parts.query, parts.fragment))
 

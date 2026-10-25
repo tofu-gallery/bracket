@@ -1,10 +1,11 @@
 # Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): the pool's size comes from the settings
-# PG_POOL_MIN_SIZE and PG_POOL_MAX_SIZE. See TOFU.md.
+# PG_POOL_MIN_SIZE and PG_POOL_MAX_SIZE, and the SQLAlchemy engine keeps no connection open. See TOFU.md.
 from typing import Any
 
 import sqlalchemy
 from databases import Database
 from heliclockter import datetime_utc
+from sqlalchemy.pool import NullPool
 
 from bracket.config import config
 
@@ -32,4 +33,6 @@ database = Database(
     max_size=config.pg_pool_max_size,
 )
 
-engine = sqlalchemy.create_engine(str(config.pg_dsn))
+# Tofu (2026-10-25): the engine only creates the tables on an empty database (bracket/utils/db_init.py). Without a pool
+# its connection closes right after, instead of staying open beside the asyncpg pool's until the process ends.
+engine = sqlalchemy.create_engine(str(config.pg_dsn), poolclass=NullPool)

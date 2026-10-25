@@ -1,3 +1,5 @@
+// Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): the GitHub link opens this copy's source
+// code. See TOFU.md.
 import { Center, Divider, Group, Tooltip, UnstyledButton } from '@mantine/core';
 import {
   Icon,
@@ -19,7 +21,7 @@ import { useLocation } from 'react-router';
 
 import PreloadLink from '@components/utils/link';
 import { capitalize } from '@components/utils/util';
-import { getBaseApiUrl } from '@services/adapter';
+import { getBaseApiUrl, getSourceCodeUrl } from '@services/adapter';
 import classes from './_main_links.module.css';
 
 interface MainLinkProps {
@@ -88,7 +90,8 @@ export function getBaseLinksDict() {
       links: [
         { link: 'https://docs.bracketapp.nl/', label: t('website_title'), icon: IconBrowser },
         {
-          link: 'https://github.com/evroon/bracket',
+          // Tofu (2026-10-25): this copy's own source code instead of upstream's repository.
+          link: getSourceCodeUrl(),
           label: t('github_title'),
           icon: IconBrandGithub,
         },

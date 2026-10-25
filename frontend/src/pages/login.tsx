@@ -1,3 +1,4 @@
+// Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): links this copy's source code. See TOFU.md.
 import {
   Anchor,
   Button,
@@ -15,6 +16,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
+import { getSourceCodeUrl } from '@services/adapter';
 import { tokenPresent } from '@services/local_storage';
 import { performLogin } from '@services/user';
 
@@ -113,6 +115,12 @@ export default function LoginPage() {
             {' - '}
             <Anchor<'a'> onClick={() => navigate('/password-reset')} size="sm">
               {t('forgot_password_button')}
+            </Anchor>
+          </Text>
+          {/* Tofu (2026-10-25): this copy's source code, for everyone who opens it (AGPL-3.0 section 13). */}
+          <Text c="dimmed" size="sm" ta="center" mt={10}>
+            <Anchor<'a'> href={getSourceCodeUrl()} target="_blank" rel="noopener noreferrer" size="sm">
+              Source code
             </Anchor>
           </Text>
         </Paper>

@@ -1,3 +1,4 @@
+// Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): adds getSourceCodeUrl. See TOFU.md.
 import { showNotification } from '@mantine/notifications';
 import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios';
 import { useNavigate } from 'react-router';
@@ -67,6 +68,11 @@ export function getBaseApiUrl() {
   return import.meta.env.VITE_API_BASE_URL != null
     ? import.meta.env.VITE_API_BASE_URL
     : 'http://localhost:8400';
+}
+
+// Tofu (2026-10-25): the address of this copy's source code; the server redirects it to its SOURCE_URL setting.
+export function getSourceCodeUrl() {
+  return `${getBaseApiUrl()}/source`;
 }
 
 export function createAxios() {

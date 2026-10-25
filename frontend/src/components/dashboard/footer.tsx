@@ -1,11 +1,15 @@
+// Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): the GitHub link opens this copy's source
+// code. See TOFU.md.
 import { Anchor, Container, Group } from '@mantine/core';
 
 import { BrandFooter } from '@components/navbar/_brand';
+import { getSourceCodeUrl } from '@services/adapter';
 import classes from './footer.module.css';
 
 const links = [
   { link: 'https://docs.bracketapp.nl', label: 'Website' },
-  { link: 'https://github.com/evroon/bracket', label: 'GitHub' },
+  // Tofu (2026-10-25): this copy's own source code instead of upstream's repository.
+  { link: getSourceCodeUrl(), label: 'GitHub' },
 ];
 
 export function DashboardFooter() {

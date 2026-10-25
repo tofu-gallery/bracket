@@ -1,3 +1,6 @@
+# Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): logos are also kept in the database,
+# the demo-account cleanup runs only while demo accounts can be made, and the API docs link this copy's source.
+# See TOFU.md.
 import glob
 import time
 from collections.abc import AsyncIterator
@@ -36,6 +39,7 @@ from bracket.utils.alembic import alembic_run_migrations
 from bracket.utils.asyncio import AsyncioTasksManager
 from bracket.utils.db_init import init_db_when_empty
 from bracket.utils.logging import logger
+from bracket.utils.tofu_logos import create_logo_table, delete_unused_logos, serve_logo
 
 init_sentry()
 
@@ -48,7 +52,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if config.auto_run_migrations and environment is not Environment.CI:
         alembic_run_migrations()
 
-    if environment is Environment.PRODUCTION:
+    # Tofu (2026-10-25): the table that keeps logos (bracket/utils/tofu_logos.py).
+    await create_logo_table()
+    await delete_unused_logos()
+
+    # Tofu (2026-10-25): the only cron job deletes expired demo accounts, so it runs only while they can be made.
+    if environment is Environment.PRODUCTION and config.allow_demo_user_registration:
         start_cronjobs()
 
     if environment is Environment.PRODUCTION and not config.is_cors_enabled():
@@ -97,7 +106,9 @@ Fore more information, see the [documentation](https://docs.bracketapp.nl).
 {table_of_contents}
 
 ### Links
-GitHub: <https://github.com/evroon/bracket>
+Source code of this copy: <{config.source_url}>
+
+Upstream project: <https://github.com/evroon/bracket>
 
 Docs: <https://docs.bracketapp.nl>
 
@@ -150,6 +161,15 @@ async def validation_exception_handler(request: Request, exc: HTTPException) -> 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
+
+
+
+# Tofu (2026-10-25): logos come from this server's disk when it has them, else from the database. Registered before
+# the static mount so that it answers first.
+@app.get(f"{config.api_prefix}/static/{{folder}}/{{filename}}", include_in_schema=False)
+async def logo(folder: str, filename: str) -> Response:
+    return await serve_logo(folder, filename)
 
 
 app.mount(f"{config.api_prefix}/static", StaticFiles(directory="static"), name="static")

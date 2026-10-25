@@ -1,3 +1,5 @@
+# Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): an uploaded logo is also kept in the
+# database. See TOFU.md.
 import csv
 import os
 from uuid import uuid4
@@ -50,6 +52,7 @@ from bracket.utils.errors import ForeignKey, check_foreign_key_violation
 from bracket.utils.id_types import PlayerId, TeamId, TournamentId
 from bracket.utils.logging import logger
 from bracket.utils.pagination import PaginationTeams
+from bracket.utils.tofu_logos import save_logo
 from bracket.utils.types import assert_some
 
 router = APIRouter(prefix=config.api_prefix)
@@ -144,8 +147,11 @@ async def update_team_logo(
 
         if new_logo_path:
             await aiofiles.os.makedirs("static/team-logos", exist_ok=True)
+            content = await file.read()
             async with aiofiles.open(new_logo_path, "wb") as f:
-                await f.write(await file.read())
+                await f.write(content)
+            # Tofu (2026-10-25): also keep the logo in the database (bracket/utils/tofu_logos.py).
+            await save_logo("team-logos", filename, content)
 
     if old_logo_path is not None and old_logo_path != new_logo_path:
         try:

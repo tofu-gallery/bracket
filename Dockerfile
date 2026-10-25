@@ -1,6 +1,6 @@
 # Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): the frontend calls the API at /api on its
 # own address, the image runs as production with the frontend served by the API, demo accounts are off, and the
-# server listens on PORT. See TOFU.md.
+# server listens on PORT, as root. See TOFU.md.
 
 # Build static frontend files
 FROM node:26-alpine AS builder
@@ -47,6 +47,10 @@ EXPOSE 8400
 
 HEALTHCHECK --interval=3s --timeout=5s --retries=10 \
     CMD wget -O /dev/null "http://127.0.0.1:${PORT:-8400}/api/ping"
+
+# Tofu (2026-10-25): the server runs as root. Tofu's container hosting sets PORT=80, and a process that is not root
+# cannot bind a port below 1024; the build steps above still run as `bracket`.
+USER root
 
 # Tofu: listen on the port Tofu sets (PORT), 8400 without it.
 CMD ["/bin/sh", "-c", "exec uv run --no-dev --locked -- gunicorn -k uvicorn.workers.UvicornWorker bracket.app:app --bind 0.0.0.0:${PORT:-8400} --workers 1"]

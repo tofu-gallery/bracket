@@ -11,6 +11,7 @@ This repository is Tofu's copy of **evroon/bracket** (licence: AGPL-3.0), listed
 
 - Framework preset `container`, root folder: the repository root. Tofu builds the root `Dockerfile` and runs the image as a service, so there is no separate install command, build command or output directory.
 - The `Dockerfile` is upstream's two-stage build. The frontend (React and Vite) is built with Node 26 and the pnpm package of Alpine Linux: `CI=true pnpm install`, then `VITE_API_BASE_URL=/api pnpm build`. The backend (FastAPI on Python 3.14) is installed with `uv sync --no-dev --locked`. One container serves both: the API under `/api` and the built frontend at every other address. It runs `gunicorn` with one Uvicorn worker on `PORT`.
+- The build steps run as the user `bracket`, as upstream has them; the server runs as root (`USER root` right before `CMD`). Tofu's container hosting sets `PORT=80` unless the app has a `PORT` setting, and a process that is not root cannot bind a port below 1024. HomeBox, the container copy already verified on Tofu, runs as root the same way.
 - Database: PostgreSQL, the app's Tofu database, read from `DATABASE_URL`. Bracket keeps all its data there; nothing else is kept between restarts (see "What works differently on Tofu").
 - The schema: on an empty database the app creates its tables itself at its first start (SQLAlchemy's `create_all`, then `alembic stamp head`), and at every start it runs `alembic upgrade head`, which does nothing while the database is current. There are no `supabase/migrations` files, so Tofu applies no SQL of its own. The app also creates its table `tofu_logos` at start. All these tables are created by the app's own connection, so they stay closed to the database's public Data API.
 - Settings Tofu sets: `PORT` and `DATABASE_URL` (and `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_CA_CERT`, which Bracket does not read).
@@ -32,6 +33,7 @@ This repository is Tofu's copy of **evroon/bracket** (licence: AGPL-3.0), listed
   - `ALLOW_DEMO_USER_REGISTRATION=false`: no demo accounts (see "What works differently on Tofu").
   - `SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25` is an image default (see "Licence and source code").
   - The command runs through `/bin/sh -c` and binds `0.0.0.0:${PORT:-8400}`: Tofu sends traffic to `PORT`, and upstream listens on 8400. The `HEALTHCHECK` asks `/api/ping` on the same port.
+  - `USER root` right before `CMD`: upstream's image runs the server as the user `bracket`, which cannot bind port 80, the `PORT` Tofu's container hosting sets. The image still installs the backend as `bracket`.
 - `backend/bracket/config.py`:
   - When `DATABASE_URL` is set and `PG_DSN` is not, `PG_DSN` is `DATABASE_URL` with the scheme `postgresql`, and with port 6543 changed to 5432 when the host ends in `.pooler.supabase.com`. Tofu's `DATABASE_URL` names Supabase's transaction pooler (6543). Bracket queries PostgreSQL through asyncpg (with the `databases` library), which prepares each statement and runs it in a second round trip, outside any transaction; a transaction pooler may send that second round trip to another server connection, where the statement does not exist. The same pooler serves session mode on 5432, with the same user, password and database, and keeps one server connection for each client connection. Any other address is kept as it is.
   - When `DATABASE_URL` is set and `JWT_SECRET` is not, `JWT_SECRET` is the SHA-256 of `bracket-jwt-secret:` followed by the whole `DATABASE_URL`, as 64 hex characters. Bracket refuses to start in production without a JWT secret, and Tofu does not supply one.
@@ -69,7 +71,7 @@ Bracket signs each sign-in token with `JWT_SECRET`; a token is valid for a week.
 ## Needs a real deploy to verify
 
 - The image builds on Tofu's container hosting: it pulls `node:26-alpine`, `python:3.14-alpine3.22` and `ghcr.io/astral-sh/uv:latest`, and installs `pnpm` with `apk`. None of these is pinned by digest, as upstream has them.
-- The server answers `/` and `/api/ping` on `PORT`, and the log shows `Listening at: http://0.0.0.0:<PORT>`.
+- The server starts as root, answers `/` and `/api/ping` on `PORT` (80 unless the app has a `PORT` setting), and the log shows `Listening at: http://0.0.0.0:80`. A local run cannot show this: it ran as an ordinary user on a free port, without Docker.
 - The session-mode address (`DATABASE_URL`'s host on port 5432) accepts the app's connections, the first start logs `Empty db detected, creating tables...`, and the runtime logs show no `prepared statement` errors.
 - The pooler's session-mode pool admits the container's connections, also while a deploy runs two containers side by side.
 - Sign-up, sign-in, creating a club, a tournament, teams and players, scheduling matches and entering scores all work; a logo uploaded before a redeploy still shows after it; the public dashboard opens signed out.

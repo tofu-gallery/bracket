@@ -1,3 +1,5 @@
+# Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): an empty database gets its tables without
+# an admin account. See TOFU.md.
 import random
 from typing import TYPE_CHECKING, Any
 
@@ -126,6 +128,13 @@ async def init_db_when_empty() -> UserId | None:
 
             logger.warning("Empty db detected, creating admin user...")
             return await create_admin_user()
+    elif table_count <= 1 and environment != Environment.CI:
+        # Tofu (2026-10-25): create the tables on an empty database without an admin account too. The first
+        # migration expects them, so a database started without ADMIN_EMAIL and ADMIN_PASSWORD never started at all;
+        # the first account is then made on the sign-up page.
+        logger.warning("Empty db detected, creating tables...")
+        metadata.create_all(engine)
+        alembic_stamp_head()
 
     return None
 

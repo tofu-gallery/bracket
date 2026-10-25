@@ -1,3 +1,5 @@
+# Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): the pool's size comes from the settings
+# PG_POOL_MIN_SIZE and PG_POOL_MAX_SIZE. See TOFU.md.
 from typing import Any
 
 import sqlalchemy
@@ -22,6 +24,12 @@ async def asyncpg_init(connection: Any) -> None:
         )
 
 
-database = Database(str(config.pg_dsn), init=asyncpg_init)
+# Tofu (2026-10-25): a session-mode pooler admits only as many clients as its pool holds, so the pool stays small.
+database = Database(
+    str(config.pg_dsn),
+    init=asyncpg_init,
+    min_size=config.pg_pool_min_size,
+    max_size=config.pg_pool_max_size,
+)
 
 engine = sqlalchemy.create_engine(str(config.pg_dsn))

@@ -1,0 +1,101 @@
+# Tofu gallery copy
+
+This repository is Tofu's copy of **evroon/bracket** (licence: AGPL-3.0), listed in Tofu's app gallery as **Tournament planner**: Bracket, a tournament system. Clubs run tournaments with teams, players and courts; stages are round-robin groups, single elimination or Swiss rounds; Bracket schedules the matches, keeps the scores and rankings, and can publish a public dashboard of the schedule and standings for each tournament.
+
+- `master` mirrors the upstream repository and is never committed to by Tofu.
+- `tofu` carries Tofu's own changes; tags named `pin/<date>` mark the versions the gallery points to. The current pin is `pin/2026-10-25`.
+- A visitor who chooses this app gets a private snapshot of the pinned version in their own Tofu account. Their copy does not follow upstream updates.
+- Upstream: https://github.com/evroon/bracket at `97f408a488a0b1bed7cf7cd53f6394aea8eb9d67` (2026-10-20).
+
+## How Tofu runs it
+
+- Framework preset `container`, root folder: the repository root. Tofu builds the root `Dockerfile` and runs the image as a service, so there is no separate install command, build command or output directory.
+- The `Dockerfile` is upstream's two-stage build. The frontend (React and Vite) is built with Node 26 and the pnpm package of Alpine Linux: `CI=true pnpm install`, then `VITE_API_BASE_URL=/api pnpm build`. The backend (FastAPI on Python 3.14) is installed with `uv sync --no-dev --locked`. One container serves both: the API under `/api` and the built frontend at every other address. It runs `gunicorn` with one Uvicorn worker on `PORT`.
+- Database: PostgreSQL, the app's Tofu database, read from `DATABASE_URL`. Bracket keeps all its data there; nothing else is kept between restarts (see "What works differently on Tofu").
+- The schema: on an empty database the app creates its tables itself at its first start (SQLAlchemy's `create_all`, then `alembic stamp head`), and at every start it runs `alembic upgrade head`, which does nothing while the database is current. There are no `supabase/migrations` files, so Tofu applies no SQL of its own. The app also creates its table `tofu_logos` at start. All these tables are created by the app's own connection, so they stay closed to the database's public Data API.
+- Settings Tofu sets: `PORT` and `DATABASE_URL` (and `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_CA_CERT`, which Bracket does not read).
+- Settings the image sets: `ENVIRONMENT=PRODUCTION`, `SERVE_FRONTEND=true`, `API_PREFIX=/api`, `ALLOW_DEMO_USER_REGISTRATION=false` and `SOURCE_URL` (this repository at the pin's tag). A setting of the same name on the app's Keys & settings page wins over the image's.
+- Settings filled in at start when `DATABASE_URL` is set and they are not: `PG_DSN` (from `DATABASE_URL`, in session mode) and `JWT_SECRET` (derived from `DATABASE_URL`). See "What Tofu changes" and "The sign-in secret".
+- Nothing has to be set by hand before the first deploy. Settings an owner may add:
+  - `ALLOW_USER_REGISTRATION=false` closes sign-up (see "Accounts").
+  - `SOURCE_URL`, the address of the copy's source code (see "Licence and source code").
+  - `JWT_SECRET`, a sign-in secret of the owner's own, as a hidden value (see "The sign-in secret").
+  - `ADMIN_EMAIL` and `ADMIN_PASSWORD`, as hidden values, only before the first deploy: on an empty database Bracket then creates an account with them. Bracket has no admin role; the account is an ordinary one.
+  - `PG_POOL_MIN_SIZE` and `PG_POOL_MAX_SIZE` (1 and 5), the database pool.
+  - `CORS_ORIGINS`, `SENTRY_DSN` (error reports to the owner's own Sentry project; none are sent without it), `PG_DSN` (a connection string of the owner's own, used as it is).
+
+## What Tofu changes
+
+- `Dockerfile`:
+  - The frontend is built with `VITE_API_BASE_URL=/api`, so it calls the API on its own address. Upstream builds it for `http://localhost:8400/api`, which only works in a browser on the machine running the container.
+  - `ENVIRONMENT=PRODUCTION`, `SERVE_FRONTEND=true` and `API_PREFIX=/api` are image defaults. Without `ENVIRONMENT`, Bracket starts in development mode, which has a fixed admin email and password and a fixed JWT secret in its code (`backend/bracket/config.py`, `DevelopmentConfig`) and creates that admin account on an empty database. Upstream's `docker-compose.yml` sets the other two.
+  - `ALLOW_DEMO_USER_REGISTRATION=false`: no demo accounts (see "What works differently on Tofu").
+  - `SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25` is an image default (see "Licence and source code").
+  - The command runs through `/bin/sh -c` and binds `0.0.0.0:${PORT:-8400}`: Tofu sends traffic to `PORT`, and upstream listens on 8400. The `HEALTHCHECK` asks `/api/ping` on the same port.
+- `backend/bracket/config.py`:
+  - When `DATABASE_URL` is set and `PG_DSN` is not, `PG_DSN` is `DATABASE_URL` with the scheme `postgresql`, and with port 6543 changed to 5432 when the host ends in `.pooler.supabase.com`. Tofu's `DATABASE_URL` names Supabase's transaction pooler (6543). Bracket queries PostgreSQL through asyncpg (with the `databases` library), which prepares each statement and runs it in a second round trip, outside any transaction; a transaction pooler may send that second round trip to another server connection, where the statement does not exist. The same pooler serves session mode on 5432, with the same user, password and database, and keeps one server connection for each client connection. Any other address is kept as it is.
+  - When `DATABASE_URL` is set and `JWT_SECRET` is not, `JWT_SECRET` is the SHA-256 of `bracket-jwt-secret:` followed by the whole `DATABASE_URL`, as 64 hex characters. Bracket refuses to start in production without a JWT secret, and Tofu does not supply one.
+  - New settings `PG_POOL_MIN_SIZE` (1), `PG_POOL_MAX_SIZE` (5) and `SOURCE_URL` (default: this repository).
+- `backend/bracket/database.py`: the connection pool holds `PG_POOL_MIN_SIZE` to `PG_POOL_MAX_SIZE` connections. asyncpg's default opens 10 at start and keeps them; in session mode the pooler admits only as many clients as its pool holds, and a deploy briefly runs the old and the new container side by side.
+- `backend/bracket/utils/db_init.py`: an empty database gets its tables without `ADMIN_EMAIL` and `ADMIN_PASSWORD` too. Upstream creates the tables only when both are set; without them, the first migration (`274385f2a757`) then fails on the missing `users` table and the app does not start.
+- Logos (`backend/bracket/utils/tofu_logos.py`, Tofu's own file; `backend/bracket/routes/tournaments.py`, `backend/bracket/routes/teams.py`, `backend/bracket/app.py`): Bracket saves an uploaded team or tournament logo as a file under `static/`, which Tofu's hosting loses at every restart and deploy. The upload routes now also save the logo in the table `tofu_logos` (folder, file name, bytes), and `GET /api/static/team-logos/<file>` and `GET /api/static/tournament-logos/<file>` answer from the file when this server has it, else from the table, with `Cache-Control: public, max-age=86400`. A name that is not `<uuid>.png|jpg|jpeg` answers 404. At every start, a logo that no team or tournament names any more and that is older than an hour is deleted from the table (a replaced logo, or one of a deleted team or tournament).
+- `backend/bracket/app.py`: the job that deletes expired demo accounts every five minutes starts only while demo accounts can be made; the image turns them off. The API documentation's links name this copy's source (`SOURCE_URL`) and the upstream project.
+- A source link for AGPL-3.0 section 13:
+  - `backend/bracket/routes/internals.py`: `GET /api/source` redirects (302) to `SOURCE_URL`.
+  - `frontend/src/services/adapter.tsx` adds `getSourceCodeUrl()`, which is `/api/source` on this image.
+  - `frontend/src/pages/login.tsx`: the sign-in page shows a "Source code" link under "Create Account - Forgot password?", before anyone signs in.
+  - `frontend/src/components/navbar/_main_links.tsx` (the signed-in "More" menu's "GitHub") and `frontend/src/components/dashboard/footer.tsx` (the public dashboard's footer, "GitHub") open `/api/source` instead of upstream's repository.
+- Nothing was removed. Tofu's safety check blocks nothing in this repository (see "Verification"); upstream's GitHub Actions workflows under `.github/workflows/` stay, and a copy never runs them.
+
+## The sign-in secret
+
+Bracket signs each sign-in token with `JWT_SECRET`; a token is valid for a week.
+
+- On Tofu the secret is derived from `DATABASE_URL` each time the container starts (above), so nothing has to be set.
+- Anything that changes `DATABASE_URL` changes the secret at the next start: a new database password, a different host, port or pooler address, other query options, or a database Tofu brings back or creates anew under a different address. After that start, every token issued before is refused, so everyone is signed out once and signs in again with the same email and password. Accounts, tournaments and everything else in the database are not affected.
+- To keep sign-ins independent of the database address, set `JWT_SECRET` as a hidden value on the app's Keys & settings page, for example the output of `openssl rand -hex 32`, and keep it unchanged afterwards. Moving from the derived secret to your own also signs everyone out once.
+- The derived secret is only as secret as `DATABASE_URL`, which Tofu keeps as a hidden value.
+
+## What works differently on Tofu
+
+- **Accounts.** Bracket has its own email and password accounts, not Tofu sign-in. Anyone who can open the address can create an account on its sign-up page ("Create Account") until the owner sets `ALLOW_USER_REGISTRATION=false` after creating their own account, or makes the app private on Tofu. Closing sign-up does not affect accounts that exist. No account is special: each account sees the clubs it created or was added to, and the first account is not an admin. There is no email: "Forgot password?" opens a page upstream has not built yet ("not found"), so a forgotten password cannot be reset from the app.
+- **No demo accounts.** Upstream's demo sign-up (`/demo`) makes throwaway accounts that a job deletes after a while; here it answers "Demo account creation is unavailable for now". An owner can turn it back on with `ALLOW_DEMO_USER_REGISTRATION=true`, which also starts that job.
+- **Logos are kept in the database** (above). They are the only files Bracket writes; everything else it stores goes straight into the database.
+- **The database connection uses the pooler's session mode** (above). Each container holds up to five connections of the pooler's pool.
+- **The "API docs" link in the "More" menu opens a "not found" page.** It points to `/api/docs`, which the frontend answers, while the API's documentation is served at `/docs` (Swagger UI) and `/redoc`. Upstream's own single-container setup (`docker-compose.yml`) behaves the same; this copy leaves it alone.
+- **Times.** Bracket reads timestamps from the database assuming the connection's time zone is UTC, which is the Supabase default. A database set to another time zone would shift the times shown.
+- **`/api/metrics`** is public, as upstream has it: request counts and response times per endpoint, nothing about accounts or tournaments.
+
+## Needs a real deploy to verify
+
+- The image builds on Tofu's container hosting: it pulls `node:26-alpine`, `python:3.14-alpine3.22` and `ghcr.io/astral-sh/uv:latest`, and installs `pnpm` with `apk`. None of these is pinned by digest, as upstream has them.
+- The server answers `/` and `/api/ping` on `PORT`, and the log shows `Listening at: http://0.0.0.0:<PORT>`.
+- The session-mode address (`DATABASE_URL`'s host on port 5432) accepts the app's connections, the first start logs `Empty db detected, creating tables...`, and the runtime logs show no `prepared statement` errors.
+- The pooler's session-mode pool admits the container's connections, also while a deploy runs two containers side by side.
+- Sign-up, sign-in, creating a club, a tournament, teams and players, scheduling matches and entering scores all work; a logo uploaded before a redeploy still shows after it; the public dashboard opens signed out.
+- A copy whose `SOURCE_URL` is set on the Keys & settings page redirects `/api/source` there, which shows Tofu passes app settings to the running container.
+
+## Licence and source code
+
+- AGPL-3.0. `LICENSE` and every copyright notice stay exactly as upstream has them. Every file Tofu changes carries a dated `Modified by Tofu on 2026-10-25` note at its top and a `Tofu (2026-10-25)` note at each change; `backend/bracket/utils/tofu_logos.py` and this file are Tofu's own.
+- The Bracket name and logo (`frontend/public/favicon.svg`, `favicon-wide.svg`) belong to the upstream project; the gallery uses them only to say which app this is. The stage icons under `frontend/public/icons` and the translations under `frontend/public/locales` are upstream's. No fonts are bundled. `docs/` is upstream's documentation website, which the image does not include.
+- Upstream's development defaults stay in the code and are never used by this image, which runs in production mode: `DevelopmentConfig` in `backend/bracket/config.py` (a fixed admin password and JWT secret), and `backend/ci.env` (a JWT secret for upstream's test runs only).
+- **Source offer (AGPL-3.0 section 13).** A modified copy that people use over a network has to offer them its own source code. The sign-in page's "Source code" link, the "More" menu's "GitHub" and the public dashboard's footer "GitHub" all open `/api/source`, which redirects to `SOURCE_URL`. The image sets it to https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25. A `SOURCE_URL` saved on the app's Keys & settings page wins, so a copy can also name this repository at the pin's exact commit, `https://github.com/tofu-gallery/bracket/tree/<commit>`; both show the same code. This repository is public, and a tag never moves.
+- An owner who changes their copy's code runs a modified version of their own. They have to publish that source and set `SOURCE_URL` to it on the app's Keys & settings page. The server reads it at start, so it takes effect with the next deploy and needs no code change.
+
+## Verification
+
+2026-10-25, on macOS arm64 against 127.0.0.1 only. No Docker (its daemon was not running), nothing deployed. The image's steps were run directly from this branch.
+
+- Backend: `uv sync --no-dev --locked` (uv 0.13.5, Python 3.14.8) installed the locked dependencies (asyncpg 0.31.0, databases 0.9.0, FastAPI 0.141.1, gunicorn 26.2.0, psycopg2-binary 2.9.11, SQLAlchemy 2.0.44, Alembic 1.20.0).
+- Frontend: `NODE_ENV=production CI=true pnpm install` (Node 22.22.3; pnpm ran as 12.8.1) and `VITE_API_BASE_URL=/api pnpm build` (Vite 8.2.4) built `dist/` (21 files, 1.6 MB). The bundle's `getBaseApiUrl()` returns `/api`, and `localhost:8400` appears nowhere in it. `dist/` was copied to `backend/frontend-dist`, as the `Dockerfile` does.
+- `config.py` on its own: with `DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require`, `PG_DSN` became the same address on port 5432 and `JWT_SECRET` the expected SHA-256; an address on another host kept port 6543; a `PG_DSN` and `JWT_SECRET` set beforehand were kept.
+- Run as the container would: a scratch PostgreSQL 14.24 database, the image's `ENV` values, `PORT=59755`, `DATABASE_URL=postgresql://<user>@127.0.0.1:5432/bracket_r9?sslmode=disable`, no `JWT_SECRET`, no `ADMIN_EMAIL`, started with the image's command (`uv run --no-dev --locked -- gunicorn -k uvicorn.workers.UvicornWorker bracket.app:app --bind ... --workers 1`); the bind address was `127.0.0.1` for this check (`0.0.0.0:${PORT:-8400}` in the image, which the first start showed expands to the port given). The first start logged `Current env: PRODUCTION`, `Empty db detected, creating tables...`, `Running migrations` and `Application startup complete`; the second start created nothing.
+- `GET /` and `GET /login` answered 200 (`text/html`, title `Bracket`), `GET /api/ping` answered `"ping"`, and `GET /api/source` answered 302 to https://github.com/tofu-gallery/bracket/tree/pin/2026-10-25. `POST /api/users/register_demo` answered 401 "Demo account creation is unavailable for now".
+- Signed up through `POST /api/users/register` (200, a token), signed in through `POST /api/token` (200), created the club "Tofu Verification Club", the tournament "Tofu Spring Cup" with a public dashboard and the team "Tofu Tigers", and read them back (`GET /api/tournaments` listed the tournament).
+- Logos: uploaded a PNG as the tournament's logo; it was served from disk, then, after its file was deleted, from `tofu_logos` with the same bytes (`cmp`), `image/png` and the cache header. A team logo was uploaded too, and the tournament's logo replaced. After the replaced row was dated two hours back and the server restarted with `static/` emptied, the replaced logo's row was gone, the current team and tournament logos still answered 200, and an unknown or malformed name answered 404.
+- That restart had `ALLOW_USER_REGISTRATION=false`: `POST /api/users/register` answered 401 "Account creation is unavailable for now", signing in still worked, and the token issued before the restart was still accepted (same `DATABASE_URL`, same derived secret).
+- Browser (Playwright 1.64 with Chromium 156, headless, every request to anything but 127.0.0.1 aborted, and none was made): the sign-in page shows the "Source code" link (`/api/source`, answering 302 to the pin); signing in reached `/`, which listed "Tofu Spring Cup" with its logo loaded; the tournament's teams page listed "Tofu Tigers"; signed out, `/tournaments/tofu-spring-cup/dashboard` showed the tournament, and its footer's "GitHub" link is `/api/source`. No page error, no console error and no failed request.
+- The local PostgreSQL runs in the `America/New_York` time zone, so the `created` times the API returned were shifted by its offset (see "Times" above); Supabase runs in UTC.
+- Tofu's own check on the pushed branch and on the tag (the GitHub import, then Tofu's static-lane and safety predicates): detected `container`; not on the Free static lane, as expected for an app that ships a `Dockerfile` (433 files, 408 that the static lane would publish); `safety ok (1 findings)`. The one finding is a medium `redirect-allowlist` note on `backend/bracket/routes/auth.py` line 41, a `redirect_uri` to `localhost` inside upstream's commented-out Google sign-in code; it does not block a deploy.
+- All local servers were stopped and the scratch database dropped afterwards.

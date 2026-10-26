@@ -1,6 +1,6 @@
 # Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): the frontend calls the API at /api on its
 # own address, the image runs as production with the frontend served by the API, demo accounts are off, and the
-# server listens on PORT, as root. Modified by Tofu on 2026-10-26: the source link names pin/2026-10-26. See TOFU.md.
+# server listens on PORT, as root. Modified by Tofu on 2026-10-26: the source link names pin/2026-10-26.1. See TOFU.md.
 
 # Build static frontend files
 FROM node:26-alpine AS builder
@@ -41,7 +41,7 @@ ENV ENVIRONMENT=PRODUCTION \
     SERVE_FRONTEND=true \
     API_PREFIX=/api \
     ALLOW_DEMO_USER_REGISTRATION=false \
-    SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-26
+    SOURCE_URL=https://github.com/tofu-gallery/bracket/tree/pin/2026-10-26.1
 
 EXPOSE 8400
 

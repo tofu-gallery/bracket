@@ -1,6 +1,7 @@
 # Modified by Tofu on 2026-10-25 (https://github.com/tofu-gallery/bracket): logos are also kept in the database,
 # the demo-account cleanup runs only while demo accounts can be made, and the API docs link this copy's source.
-# See TOFU.md.
+# Modified by Tofu on 2026-10-26: the start's schema work runs once, under one lock, with row-level security on every
+# table. See TOFU.md.
 import glob
 import time
 from collections.abc import AsyncIterator
@@ -35,11 +36,10 @@ from bracket.routes import (
     tournaments,
     users,
 )
-from bracket.utils.alembic import alembic_run_migrations
 from bracket.utils.asyncio import AsyncioTasksManager
-from bracket.utils.db_init import init_db_when_empty
 from bracket.utils.logging import logger
-from bracket.utils.tofu_logos import create_logo_table, delete_unused_logos, serve_logo
+from bracket.utils.tofu_logos import delete_unused_logos, serve_logo
+from bracket.utils.tofu_schema import prepare_schema
 
 init_sentry()
 
@@ -47,13 +47,13 @@ init_sentry()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await database.connect()
-    await init_db_when_empty()
 
-    if config.auto_run_migrations and environment is not Environment.CI:
-        alembic_run_migrations()
+    # Tofu (2026-10-26): upstream's init_db_when_empty() and alembic_run_migrations(), and Tofu's logo table, run in
+    # one transaction under one lock, so that several starts at once do the work once, followed by row-level security
+    # on every table (bracket/utils/tofu_schema.py).
+    prepare_schema()
 
-    # Tofu (2026-10-25): the table that keeps logos (bracket/utils/tofu_logos.py).
-    await create_logo_table()
+    # Tofu (2026-10-25): logos no team or tournament names (bracket/utils/tofu_logos.py).
     await delete_unused_logos()
 
     # Tofu (2026-10-25): the only cron job deletes expired demo accounts, so it runs only while they can be made.

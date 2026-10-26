@@ -1,3 +1,5 @@
+# Modified by Tofu on 2026-10-26 (https://github.com/tofu-gallery/bracket): a command can run on a connection the
+# caller gives, inside the caller's transaction. See TOFU.md.
 import logging
 import os
 import sys
@@ -26,6 +28,17 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    # Tofu (2026-10-26): a command given a connection (bracket/utils/alembic.py) runs on it, inside the caller's
+    # transaction, which commits or rolls back the migrations with the rest of its work (bracket/utils/tofu_schema.py).
+    shared_connection = ALEMBIC_CONFIG.attributes.get("connection")
+    if shared_connection is not None:
+        context.configure(
+            connection=shared_connection, target_metadata=Base.metadata, compare_type=True
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+        return
+
     config_ini_section = ALEMBIC_CONFIG.get_section(ALEMBIC_CONFIG.config_ini_section)
     assert config_ini_section is not None, "No section 'alembic' found in config.ini"
     config_ini_section["sqlalchemy.url"] = str(config.pg_dsn)

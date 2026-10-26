@@ -3,17 +3,18 @@ Tofu (2026-10-25, https://github.com/tofu-gallery/bracket): team and tournament 
 
 Bracket saves an uploaded logo as a file under static/ on the server's disk. Tofu's hosting keeps no disk across a
 restart or a deploy, so the upload routes also save each logo in the table tofu_logos, and `serve_logo` answers
-<API_PREFIX>/static/<folder>/<file> from the file when this server has it, else from that table. The table is created at
-start (`create_logo_table`). The upload routes refuse a file over 5 MB (`read_logo`). A logo's row is deleted as soon as
-nothing names it any more: right after a team's or tournament's logo is replaced or removed, and after a team or
-tournament is deleted (`delete_logo`); anything those miss is deleted at the next start (`delete_unused_logos`).
-See TOFU.md.
+<API_PREFIX>/static/<folder>/<file> from the file when this server has it, else from that table. The table is created by
+the start's schema step (`create_logo_table`, called by bracket/utils/tofu_schema.py). The upload routes refuse a file
+over 5 MB (`read_logo`). A logo's row is deleted as soon as nothing names it any more: right after a team's or
+tournament's logo is replaced or removed, and after a team or tournament is deleted (`delete_logo`); anything those miss
+is deleted at the next start (`delete_unused_logos`). See TOFU.md.
 """
 
 import re
 from pathlib import Path
 
 import aiofiles.os
+from sqlalchemy import Connection, text
 from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
 from starlette.responses import FileResponse, Response
@@ -30,14 +31,17 @@ MEDIA_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
 MAX_LOGO_BYTES = 5 * 1024**2
 
 
-async def create_logo_table() -> None:
-    await database.execute(
-        "CREATE TABLE IF NOT EXISTS tofu_logos ("
-        " folder TEXT NOT NULL,"
-        " filename TEXT NOT NULL,"
-        " content BYTEA NOT NULL,"
-        " created TIMESTAMPTZ NOT NULL DEFAULT now(),"
-        " PRIMARY KEY (folder, filename))"
+def create_logo_table(connection: Connection) -> None:
+    """On the schema step's connection, inside its transaction and its lock (bracket/utils/tofu_schema.py)."""
+    connection.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS tofu_logos ("
+            " folder TEXT NOT NULL,"
+            " filename TEXT NOT NULL,"
+            " content BYTEA NOT NULL,"
+            " created TIMESTAMPTZ NOT NULL DEFAULT now(),"
+            " PRIMARY KEY (folder, filename))"
+        )
     )
 
 

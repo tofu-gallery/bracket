@@ -33,6 +33,11 @@ database = Database(
     max_size=config.pg_pool_max_size,
 )
 
+
+def get_sync_engine_url() -> str:
+    return str(config.pg_dsn).replace("postgresql://", "postgresql+psycopg2://", 1)
+
+
 # Tofu (2026-10-25): the engine only creates the tables on an empty database (bracket/utils/db_init.py). Without a pool
 # its connection closes right after, instead of staying open beside the asyncpg pool's until the process ends.
-engine = sqlalchemy.create_engine(str(config.pg_dsn), poolclass=NullPool)
+engine = sqlalchemy.create_engine(get_sync_engine_url(), poolclass=NullPool)
